@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>津山データ 組み合わせ分析</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.css" />
+  <style>
+    body { margin: 0; background: #ffffff; font-family: "Hiragino Sans", "Yu Gothic", YuGothic, Meiryo, sans-serif; }
+    #boot { max-width: 640px; margin: 18vh auto 0; padding: 0 16px; color: #0b0b0b; }
+    #boot h1 { font-size: 1.5rem; margin: 0 0 .6rem; }
+    #boot p { color: #52514e; line-height: 1.7; margin: .3rem 0; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="boot">
+      <h1>津山データ 組み合わせ分析</h1>
+      <p>アプリを準備しています。初回はブラウザ内で動くPythonを読み込むため、1分ほどかかります（2回目以降は速くなります）。</p>
+      <p>このアプリはブラウザの中だけで計算します。入れたデータはサーバーに送信されません。</p>
+    </div>
+  </div>
+  <script type="module">
+    import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.js";
+    const code = [
+      "app.py", "core/__init__.py", "core/analyze.py", "core/charts.py", "core/ingest.py",
+      "core/integrate.py", "core/labels.py", "core/present.py", ".streamlit/config.toml",
+    ];
+    const binary = ["assets/tsuyama_template.pptx", "assets/fonts/NotoSansJP-Regular.ttf", "assets/fonts/NotoSansJP-Bold.ttf"];
+    const files = {};
+    for (const f of [...code, ...binary]) files[f] = { url: "./" + f };
+    mount(
+      {
+        requirements: ["plotly", "xlsxwriter", "python-pptx", "matplotlib", "scipy", "pillow"],
+        entrypoint: "app.py",
+        files,
+      },
+      document.getElementById("root"),
+    );
+  </script>
+</body>
+</html>

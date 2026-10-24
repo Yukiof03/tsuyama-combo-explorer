@@ -10,16 +10,18 @@
 
 ローカル完結のWebアプリ（Streamlit）。データはこのPCの外に送信されない。
 
-## クラウド版（チームで使う）
+## ブラウザ版（チームで使う）
 
-Streamlit Community Cloud に、このリポジトリ（非公開）から公開している。
+**URL：https://yukiof03.github.io/tsuyama-combo-explorer/**
 
-- 公開設定：招待したメールアドレスの人だけ閲覧可（Streamlit Cloud の Share 設定で管理）。
-- クラウドでは「PC内のフォルダから読む」は無効。ファイルはアップロードで入れる。
-- アップロードしたデータはクラウドのサーバー上で処理される（ファイルとしては保存しない。計算結果のキャッシュは最長1時間で消える）。
-  津山市から提供された個人単位のデータを入れる場合は、データの取り扱いルールを守ること。
-- 日本語フォントは `packages.txt`（fonts-noto-cjk）でサーバーに入れている。
-- 合言葉を使う場合は、Streamlit Cloud の Secrets に `app_password = "..."` を設定する（コードには書かない）。
+- [stlite](https://github.com/whitphx/stlite)（ブラウザ内で動く Streamlit。Pyodide＝WebAssembly版Python）で、このアプリを**開いた人のブラウザの中だけ**で動かしている。
+  入れたデータはサーバーに送信されない（GitHub Pages はアプリのプログラムを配るだけ）。
+- 初回は Python 本体などを読み込むため 1 分ほどかかる。2 回目以降はブラウザのキャッシュで速くなる。
+- 実データ（約97MB）の統合〜全組み合わせ検定はブラウザ内で約40〜50秒。
+- ブラウザ版では「PC内のフォルダから読む」は使えない（アップロードで入れる）。
+- 発表用グラフの日本語は同梱の Noto Sans JP（`assets/fonts`、SIL Open Font License）で描く。
+- 入口は `index.html`。stlite のバージョンは `@stlite/browser@1.11.0` に固定している。
+- 更新するときは、このリポジトリの `main` を更新すれば数分で反映される。
 
 ## ローカルで起動
 
@@ -70,6 +72,9 @@ UTF-16（タブ区切り）・UTF-8・CP932 に対応。ファイル名は問わ
 - `core/analyze.py` … 全組み合わせの検定・判定
 - `core/charts.py` … 画面上のグラフ（plotly）
 - `core/present.py` … 発表用の図（matplotlib）とPPTX出力
-- `assets/tsuyama_template.pptx` … 津山の発表テンプレート（26sp中間_津山.pptx の複製）
+- `assets/tsuyama_template.pptx` … 津山の発表テンプレート（マスター・レイアウトのみ。スライドの中身は含まない）
+- `assets/fonts/` … Noto Sans JP（ブラウザ版の発表用グラフ用）と OFL ライセンス
+- `index.html` … ブラウザ版の入口（stlite）
+- `.nojekyll` … GitHub Pages で `.streamlit` を配信するため
 - `core/labels.py` … シルタス列名の日本語ラベル（tsuyama-health-analytics から複製）
 - `smoke_test.py` … 実データで読込〜分析が通るかの確認用（`python3 smoke_test.py <フォルダ>`）

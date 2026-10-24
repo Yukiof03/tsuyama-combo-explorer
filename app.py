@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import io
 import os
+import sys
 import zipfile
 from pathlib import Path
 
@@ -30,8 +31,10 @@ html, body, [class*="css"], .stMarkdown, .stDataFrame { font-family: "Hiragino S
 </style>
 """, unsafe_allow_html=True)
 
-# クラウド（Streamlit Community Cloud）で動いているか。クラウドではサーバー上のフォルダ読込を無効にする
+# 実行環境：ブラウザ内（stlite/Pyodide）・クラウドのサーバー・ローカルPC
+IN_BROWSER = sys.platform == "emscripten"
 IS_CLOUD = Path.home().as_posix().startswith("/home/appuser") or os.environ.get("TSUYAMA_CLOUD") == "1"
+NO_FOLDER = IN_BROWSER or IS_CLOUD  # サーバーやブラウザではPC内フォルダの読込は使えない
 
 
 def _secret(name):
@@ -136,7 +139,7 @@ def kpi(col, value, label):
 # ================================================================ サイドバー
 with st.sidebar:
     st.header("設定")
-    if IS_CLOUD:
+    if NO_FOLDER:
         mode = "ファイルをアップロード"
     else:
         mode = st.radio("データの読み込み方", ["ファイルをアップロード", "PC内のフォルダから読む"], index=0)
@@ -153,7 +156,9 @@ with st.sidebar:
               "r": st.number_input("2群の差 r", 0.0, 1.0, 0.10, 0.05),
               "ε²": st.number_input("3群以上の差 ε²", 0.0, 1.0, 0.01, 0.005, format="%.3f"),
               "V": st.number_input("カテゴリどうし Cramér's V", 0.0, 1.0, 0.10, 0.05)}
-    if IS_CLOUD:
+    if IN_BROWSER:
+        st.caption("データはこのブラウザの中だけで処理されます。サーバーには送信されません。")
+    elif IS_CLOUD:
         st.caption("アップロードしたデータはクラウドのサーバー上で処理されます（ファイルとしては保存せず、計算結果も最長1時間で消去）。")
     else:
         st.caption("データはこのPCの中だけで処理され、外部には送信されません。")
@@ -196,7 +201,7 @@ with tab_in:
         st.info("ファイルを入れると、自動で種類を判別して統合・分析が始まります。")
         st.stop()
 
-    with st.spinner("統合して、全組み合わせを検定しています…（数秒〜数十秒）"):
+    with st.spinner("統合して、全組み合わせを検定しています…" + ("（ブラウザ内で計算するため1〜2分かかることがあります）" if IN_BROWSER else "（数秒〜数十秒）")):
         key_files = hashlib.md5(b"".join(n.encode() + hashlib.md5(d).digest() for n, d in files)).hexdigest()
         out = run_pipeline(key_files, tuple(files), int(min_months), float(min_erate), exclude_trivial)
 
@@ -367,8 +372,9 @@ with tab_pres:
         st.info("有意な組み合わせがありません。")
     else:
         p1, p2, p3, p4 = st.columns([1.3, 1.2, 1.5, 1])
-        p_ds = p1.multiselect("データ", [n for n in DATASETS if n in sig_all["データ"].unique()],
-                              default=[n for n in DATASETS if n in sig_all["データ"].unique()][:2], key="p_ds")
+        ds_opts = [n for n in DATASETS if n in sig_all["データ"].unique()]
+        # 選べるデータが増えたら（例：シルタスの後にケンコムを入れた）選択をやり直すため、キーに選択肢を含める
+        p_ds = p1.multiselect("データ", ds_opts, default=ds_opts[:2], key="p_ds_" + "_".join(ds_opts))
         p_level = p2.radio("対象", ["有意（効果あり）のみ", "有意すべて"], key="p_level")
         p_kw = p3.text_input("変数名で絞り込み", "", key="p_kw")
         p_same = p4.checkbox("同じ分類どうしを除く", True, key="p_same", help="例：栄養素の指数どうし（栄養学的に当然似る組み合わせ）")

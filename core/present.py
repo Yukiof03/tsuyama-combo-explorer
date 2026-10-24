@@ -25,9 +25,18 @@ AGE_ORDER = ["〜29", "30代", "40代", "50代", "60-64", "65-74", "75+"]
 TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "tsuyama_template.pptx"
 
 def _jp_font():
-    """このPCにある日本語フォントを1つ選ぶ（Mac: ヒラギノ／Windows: 游ゴシック・メイリオ）。"""
+    """日本語フォントを1つ選ぶ。同梱の Noto Sans JP（assets/fonts）を最優先で登録する
+    （ブラウザ内で動く版にはOSのフォントが無いため）。無ければPCのフォントを使う。"""
     from matplotlib import font_manager as fm
+    bundled = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+    for f in sorted(bundled.glob("*.ttf")):
+        try:
+            fm.fontManager.addfont(str(f))
+        except Exception:  # noqa: BLE001
+            pass
     have = {f.name for f in fm.fontManager.ttflist}
+    if "Noto Sans JP" in have:
+        return "Noto Sans JP"
     for name in ["Hiragino Sans", "YuGothic", "Yu Gothic", "BIZ UDPGothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP"]:
         if name in have:
             return name
