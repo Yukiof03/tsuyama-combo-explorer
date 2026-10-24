@@ -148,6 +148,9 @@ def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fa
         if len(rows) != len(ct.index):
             rows = list(ct.index)
         ct = ct.loc[rows]
+        ct_trim = compact and len(ct) > 10
+        if ct_trim:  # 小さな図では人数の多い10カテゴリに絞る
+            ct = ct.loc[ct.sum(axis=1).sort_values(ascending=False).index[:10]]
         pct = ct.div(ct.sum(axis=1), axis=0) * 100
         fig, ax = plt.subplots(figsize=(8, max(2.6, 0.55 * len(pct) + 1.4)))
         left = np.zeros(len(pct))
@@ -172,6 +175,9 @@ def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fa
         g = g[g["size"] >= K_MIN]
         natural = [o for o in AGE_ORDER if o in g.index]
         g = g.loc[natural] if len(natural) == len(g) else g.sort_values("median", ascending=False)
+        trimmed = compact and len(g) > 10  # 小さな図ではカテゴリが多いと読めないため、上位5・下位5に絞る
+        if trimmed:
+            g = pd.concat([g.head(5), g.tail(5)])
         hi, lo = g["median"].idxmax(), g["median"].idxmin()
         colors = [ORANGE if i == hi else BLUE if i == lo else "#9ec5f4" for i in g.index] if len(g) > 2 else [ORANGE, BLUE] if g["median"].iloc[0] >= g["median"].iloc[1] else [BLUE, ORANGE]
         labels = [f"{i}\n(n={int(s):,})" for i, s in zip(g.index, g["size"])]
@@ -197,6 +203,13 @@ def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fa
             ax.set_xlabel(axis_label(r, _num_idx(r), "の中央値"))
             ax.grid(axis="y", visible=False)
     if compact:
+        note = ""
+        if locals().get("trimmed"):
+            note = "※ カテゴリが多いため、中央値の上位5・下位5のみ表示"
+        elif locals().get("ct_trim"):
+            note = "※ カテゴリが多いため、人数の多い10カテゴリのみ表示"
+        if note:
+            fig.text(0.01, 0.005, note, fontsize=8, color=INK2, ha="left", va="bottom")
         fig.set_size_inches(4.8, 3.3)  # 一覧で大きさをそろえる
         fig.tight_layout()
         return fig
