@@ -1,0 +1,9 @@
+streamlit>=1.40
+pandas>=2.0
+numpy
+scipy
+plotly>=5.20
+xlsxwriter
+matplotlib>=3.8
+python-pptx>=1.0
+pillow

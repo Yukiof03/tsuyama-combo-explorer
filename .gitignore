@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.impeccable/
+.DS_Store
+.streamlit/secrets.toml
+# データは絶対に含めない
+*.csv
+*.tsv
+*.xlsx
+data/
