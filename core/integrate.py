@@ -36,6 +36,36 @@ def age_bin(a):
                   labels=["〜29", "30代", "40代", "50代", "60-64", "65-74", "75+"]).astype(str).replace("nan", np.nan)
 
 
+# ---------------------------------------------------------------- 単位
+UNITS = {
+    "年齢": "歳", "世帯人数": "人", "買い物比率": "%", "購買月数": "か月", "エネルギー充足率": "%",
+    "歩活参加回数": "回", "独自ポイント": "pt", "kencomコイン": "コイン", "お知らせ既読件数": "件",
+    "起動回数": "回", "起動月数": "か月", "記事閲覧数": "本", "閲覧記事数（ユニーク）": "本",
+    "歩数（日平均）": "歩/日", "歩数の記録日数": "日", "週末−平日の歩数差": "歩/日",
+    "体重（平均）": "kg", "体重変化率": "%", "体重の記録頻度": "回/週", "睡眠時間（平均）": "時間",
+    "最高血圧（平均）": "mmHg", "最低血圧（平均）": "mmHg", "体温・朝（平均）": "℃",
+    "行動メニュー達成率": "%", "行動メニュー設定数（1日あたり）": "個/日", "Na/K比": "",
+}
+
+
+def unit_of(col):
+    """(単位, 補足)。指数は単位を持たないので「100＝カロリー相応」を補足として返す。"""
+    if col.endswith(" 指数"):
+        return "", "100＝カロリー相応"
+    if col.endswith("構成比") or col.endswith("構成比（全体）") or col.endswith("エネルギー比") or col.endswith("記事の割合"):
+        return "%", ""
+    if col == "Na/K比":
+        return "", "食塩指数÷カリウム指数"
+    return UNITS.get(col, ""), ""
+
+
+def add_units(V):
+    for v in V:
+        if v["kind"] == "num":
+            v["unit"], v["unit_note"] = unit_of(v["col"])
+    return V
+
+
 def _var(col, label, kind, group, desc="", src=None):
     """src: 元になったデータ。src が重なる2変数は定義上つながるため、既定で検定から外す。"""
     return {"col": col, "label": label, "kind": kind, "group": group, "desc": desc, "src": set(src or [col])}
@@ -137,7 +167,7 @@ def sirutasu_users(m: pd.DataFrame, min_months=3, min_erate=10):
     u.index.name = "シルタスユーザID"
     full = u.copy()
     u = u[(u["購買月数"] >= min_months) & (u["エネルギー充足率"] >= min_erate)]
-    return u, full, V
+    return u, full, add_units(V)
 
 
 def sirutasu_wide(m: pd.DataFrame):
@@ -293,7 +323,7 @@ def kencom_users(k: dict):
             u["行動メニュー設定数（1日あたり）"] = nset[nset > 0].groupby(life[uid][nset > 0]).mean()
             V += [_var("行動メニュー達成率", "行動メニュー達成率（%）", "num", "行動メニュー"),
                   _var("行動メニュー設定数（1日あたり）", "行動メニュー設定数（1日あたり）", "num", "行動メニュー")]
-    return u, V
+    return u, add_units(V)
 
 
 def kencom_monthly_wide(k: dict):

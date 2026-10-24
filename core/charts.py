@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from .analyze import K_MIN
+from .analyze import K_MIN, axis_label
 
 FONT = "Hiragino Sans, Yu Gothic, YuGothic, Meiryo, sans-serif"
 CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
@@ -31,7 +31,7 @@ def pair_chart(df, r):
         fig = go.Figure()
         fig.add_trace(go.Scattergl(x=sample[c1], y=sample[c2], mode="markers", name="ユーザー",
                                    marker=dict(size=6, color=CAT[0], opacity=0.35, line=dict(width=0)),
-                                   hovertemplate=f"{l1}: %{{x:.3g}}<br>{l2}: %{{y:.3g}}<extra></extra>"))
+                                   hovertemplate=f"{axis_label(r, 1)}: %{{x:.3g}}<br>{axis_label(r, 2)}: %{{y:.3g}}<extra></extra>"))
         # 10分位ごとの中央値（傾向線）
         try:
             m["bin"] = pd.qcut(m[c1].rank(method="first"), 10, labels=False)
@@ -44,7 +44,7 @@ def pair_chart(df, r):
         for ax, c in (("x", c1), ("y", c2)):
             lo, hi = m[c].quantile([0.01, 0.99])
             pad = (hi - lo) * 0.05 or 1
-            fig.update_layout(**{f"{ax}axis": dict(range=[lo - pad, hi + pad], title=l1 if ax == "x" else l2)})
+            fig.update_layout(**{f"{ax}axis": dict(range=[lo - pad, hi + pad], title=axis_label(r, 1) if ax == "x" else axis_label(r, 2))})
         return _layout(fig)
     if r["kind1"] == "cat" and r["kind2"] == "cat":
         m = df[[c1, c2]].dropna()
@@ -77,7 +77,7 @@ def pair_chart(df, r):
         fig.add_trace(go.Box(y=v, name=f"{c}<br>(n={len(v)})", marker_color=CAT[i % len(CAT)] if len(order) <= len(CAT) else CAT[0],
                              boxmean=False, boxpoints=False, line=dict(width=1.5)))
     pad = (hi - lo) * 0.05 or 1
-    fig.update_layout(showlegend=False, yaxis=dict(title=ln, range=[lo - pad, hi + pad]), xaxis=dict(title=lc))
+    fig.update_layout(showlegend=False, yaxis=dict(title=axis_label(r, 2 if r["kind1"] == "cat" else 1), range=[lo - pad, hi + pad]), xaxis=dict(title=lc))
     return _layout(fig)
 
 

@@ -45,7 +45,8 @@ def test_pair(df, a, b, min_n=MIN_N_NUM):
             return None
         meds = {c: g.median() for c, g in groups.items()}
         hi, lo = max(meds, key=meds.get), min(meds, key=meds.get)
-        detail = f"中央値 最大「{hi}」{meds[hi]:.3g}／最小「{lo}」{meds[lo]:.3g}"
+        u = b.get("unit", "") if len(b.get("unit", "")) <= 4 else ""
+        detail = f"中央値 最大「{hi}」{meds[hi]:.3g}{u}／最小「{lo}」{meds[lo]:.3g}{u}"
         n = sum(len(g) for g in groups.values())
         if len(groups) == 2:
             g1, g2 = groups.values()
@@ -98,6 +99,7 @@ def run_all(df, variables, dataset, only_cross=False, progress=None, exclude_tri
         if r is None:
             continue
         rows.append({"データ": dataset, "変数1": a["label"], "変数2": b["label"], "col1": a["col"], "col2": b["col"],
+                     "単位1": a.get("unit", ""), "単位2": b.get("unit", ""), "補足1": a.get("unit_note", ""), "補足2": b.get("unit_note", ""),
                      "kind1": a["kind"], "kind2": b["kind"], "分類1": a["group"], "分類2": b["group"],
                      "同系統": a["group"] == b["group"], **r})
     res = pd.DataFrame(rows)
@@ -118,6 +120,29 @@ def classify(res, q_th=0.05, thresh=None):
     res = res.copy()
     res["判定"] = np.select([sig & big, sig & ~big], ["有意（効果あり）", "有意（効果小）"], "有意でない")
     return res
+
+
+def _g(r, k):
+    v = r.get(k, "") if hasattr(r, "get") else ""
+    return "" if v is None or (isinstance(v, float) and v != v) else str(v)
+
+
+def axis_label(r, i, suffix=""):
+    """変数i(1/2)の軸ラベル。例: 年齢［歳］、亜鉛 指数（100＝カロリー相応）。ラベルに既に単位があれば重ねない。"""
+    import re
+    lab, unit, note = r[f"変数{i}"], _g(r, f"単位{i}"), _g(r, f"補足{i}")
+    # 「体重（平均, kg）」「達成率（%）」のように括弧内に単位が書かれていれば重ねない（「起動回数」の「回」は単位ではない）
+    if unit and not re.search(r"[（(,、]\s*" + re.escape(unit) + r"\s*[）)]", lab):
+        return f"{lab}{suffix}［{unit}］"
+    if note and note not in lab:
+        return f"{lab}{suffix}（{note}）"
+    return lab + suffix
+
+
+def val_unit(r, i):
+    """値ラベルに付ける短い単位（%・歳・kg など）。長い単位は軸だけに付ける。"""
+    u = _g(r, f"単位{i}")
+    return u if len(u) <= 2 else ""
 
 
 def sentence(r):

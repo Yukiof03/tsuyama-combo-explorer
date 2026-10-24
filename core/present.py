@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from .analyze import K_MIN  # noqa: E402
+from .analyze import K_MIN, axis_label, val_unit  # noqa: E402
 
 BLUE, ORANGE, AQUA, YELLOW, MAGENTA, GREEN, VIOLET, RED = (
     "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948")
@@ -65,6 +65,11 @@ def _cat_num(r):
     return (r["col1"], r["col2"], r["変数1"], r["変数2"]) if r["kind1"] == "cat" else (r["col2"], r["col1"], r["変数2"], r["変数1"])
 
 
+def _num_idx(r):
+    """カテゴリ×数値のとき、数値側が変数1か2か。"""
+    return 2 if r["kind1"] == "cat" else 1
+
+
 def headline(df, r):
     """図の見出し（結論）を自動で作る。"""
     if r["kind1"] == "num" and r["kind2"] == "num":
@@ -75,7 +80,8 @@ def headline(df, r):
     meds = df[[cat, num]].dropna().groupby(cat)[num].agg(["median", "size"])
     meds = meds[meds["size"] >= K_MIN]["median"].sort_values(ascending=False)
     if len(meds) == 2:
-        return f"「{lc}：{meds.index[0]}」の人は「{ln}」が高い（{fmt(meds.iloc[0])} vs {meds.index[1]} {fmt(meds.iloc[1])}）"
+        u = val_unit(r, _num_idx(r))
+        return f"「{lc}：{meds.index[0]}」の人は「{ln}」が高い（{fmt(meds.iloc[0])}{u} vs {meds.index[1]} {fmt(meds.iloc[1])}{u}）"
     return f"「{ln}」は{lc}によって異なる（最も高い：{meds.index[0]}、最も低い：{meds.index[-1]}）"
 
 
@@ -89,7 +95,16 @@ def footnote(r):
     return base + extra
 
 
-def make_figure(df, r, title=None, style="区間ごとの中央値"):
+def make_figure(df, r, title=None, style="区間ごとの中央値", compact=False):
+    """compact=True: 一覧（スライド1枚に6枚など）向けの小さな図。文字を大きめにし、脚注は付けない。"""
+    if compact:
+        with plt.rc_context({"font.size": 11, "xtick.labelsize": 10, "ytick.labelsize": 10, "axes.labelsize": 10.5}):
+            fig = _make_figure(df, r, None, style, compact=True)
+        return fig
+    return _make_figure(df, r, title, style)
+
+
+def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=False):
     """matplotlib の Figure を返す。title=None なら見出しなし（スライド側にタイトルを置く場合）。"""
     if r["kind1"] == "num" and r["kind2"] == "num":
         c1, c2, l1, l2 = r["col1"], r["col2"], r["変数1"], r["変数2"]
@@ -106,7 +121,7 @@ def make_figure(df, r, title=None, style="区間ごとの中央値"):
                 pad = (hi - lo) * 0.05 or 1
                 (ax.set_xlim if a_ == "x" else ax.set_ylim)(lo - pad, hi + pad)
             ax.legend(loc="upper left")
-            ax.set_xlabel(l1)
+            ax.set_xlabel(axis_label(r, 1))
         else:
             m["bin"] = pd.qcut(m[c1].rank(method="first"), 5, labels=False)
             t = m.groupby("bin").agg(lo=(c1, "min"), hi=(c1, "max"), y=(c2, "median"),
@@ -115,13 +130,14 @@ def make_figure(df, r, title=None, style="区間ごとの中央値"):
             colors = [ORANGE if r["効果量"] > 0 and i == len(t) - 1 or r["効果量"] < 0 and i == 0 else BLUE for i in xs]
             ax.bar(xs, t.y, color=colors, width=0.62)
             ax.errorbar(xs, t.y, yerr=[t.y - t.q1, t.q3 - t.y], fmt="none", ecolor=INK2, capsize=3, lw=1)
+            u2 = val_unit(r, 2)
             for x, y in zip(xs, t.y):
-                ax.text(x + 0.33, y, fmt(y), va="center", ha="left", fontsize=9, color=INK, fontweight="bold")
+                ax.text(x + 0.33, y, fmt(y) + u2, va="center", ha="left", fontsize=9, color=INK, fontweight="bold")
             ax.set_xticks(xs, [f"{['低い', 'やや低い', '中間', 'やや高い', '高い'][i]}\n{fmt(a)}〜{fmt(b)}" for i, (a, b) in enumerate(zip(t.lo, t.hi))],
                           fontsize=8.5)
-            ax.set_xlabel(f"{l1}（人数が等しい5区間）")
+            ax.set_xlabel(f"{axis_label(r, 1)}　人数が等しい5区間")
             ax.grid(axis="x", visible=False)
-        ax.set_ylabel(l2)
+        ax.set_ylabel(axis_label(r, 2) if style == "散布図＋傾向線" else axis_label(r, 2, "の中央値"))
     elif r["kind1"] == "cat" and r["kind2"] == "cat":
         c1, c2, l1, l2 = r["col1"], r["col2"], r["変数1"], r["変数2"]
         m = df[[c1, c2]].dropna()
@@ -164,9 +180,9 @@ def make_figure(df, r, title=None, style="区間ごとの中央値"):
             xs = np.arange(len(g))
             ax.bar(xs, g["median"], color=colors, width=0.6)
             for x, v in zip(xs, g["median"]):
-                ax.text(x, v, fmt(v), ha="center", va="bottom", fontsize=10, color=INK, fontweight="bold")
+                ax.text(x, v, fmt(v) + val_unit(r, _num_idx(r)), ha="center", va="bottom", fontsize=10, color=INK, fontweight="bold")
             ax.set_xticks(xs, labels, fontsize=9)
-            ax.set_ylabel(f"{ln}（中央値）")
+            ax.set_ylabel(axis_label(r, _num_idx(r), "の中央値"))
             ax.set_xlabel(lc)
             ax.grid(axis="x", visible=False)
             ax.set_ylim(0, g["median"].max() * 1.15 if g["median"].max() > 0 else None)
@@ -175,11 +191,15 @@ def make_figure(df, r, title=None, style="区間ごとの中央値"):
             ys = np.arange(len(g))
             ax.barh(ys, g["median"], color=colors, height=0.62)
             for yv, v in zip(ys, g["median"]):
-                ax.text(v, yv, " " + fmt(v), va="center", fontsize=9, color=INK, fontweight="bold")
+                ax.text(v, yv, " " + fmt(v) + val_unit(r, _num_idx(r)), va="center", fontsize=9, color=INK, fontweight="bold")
             ax.set_yticks(ys, [lab.replace("\n", " ") for lab in labels], fontsize=9)
             ax.invert_yaxis()
-            ax.set_xlabel(f"{ln}（中央値）")
+            ax.set_xlabel(axis_label(r, _num_idx(r), "の中央値"))
             ax.grid(axis="y", visible=False)
+    if compact:
+        fig.set_size_inches(4.8, 3.3)  # 一覧で大きさをそろえる
+        fig.tight_layout()
+        return fig
     if title:
         fig.suptitle(title, x=0.01, ha="left", fontweight="bold", color=INK, fontsize=12.5)
     fig.text(0.01, -0.02, footnote(r), fontsize=8, color=INK2, ha="left", va="top", wrap=True)

@@ -243,6 +243,7 @@ with tab_int:
             st.dataframe(df[show].head(100), width="stretch")
             with st.expander("変数の一覧と定義"):
                 st.dataframe(pd.DataFrame([{"変数": v["label"], "種類": "数値" if v["kind"] == "num" else "カテゴリ",
+                                            "単位": v.get("unit") or v.get("unit_note") or ("" if v["kind"] == "num" else "－"),
                                             "分類": v["group"], "説明": v["desc"]} for v in V]), hide_index=True, width="stretch")
             d1, d2, d3 = st.columns(3)
             d1.download_button("ユーザー別データ（CSV）", to_csv(df[show]), f"{name}_ユーザー別.csv", "text/csv")
