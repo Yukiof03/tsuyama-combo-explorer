@@ -70,10 +70,44 @@ def _num_idx(r):
     return 2 if r["kind1"] == "cat" else 1
 
 
+COUNT_UNITS = {"人", "回", "件", "本", "日", "か月", "pt", "コイン"}
+
+
+def _is_discrete(s):
+    """とる値が少ない整数（世帯人数・回数など）か。こうした変数は区間ではなく値ごとに描く。"""
+    s = pd.Series(s).dropna()
+    return len(s) > 0 and s.nunique() <= 12 and bool((s % 1 == 0).all())
+
+
+def _xy(df, r):
+    """数値×数値で横軸にする変数の番号(1/2)。値の少ない整数の変数があればそれを横軸にする。"""
+    d1, d2 = _is_discrete(df[r["col1"]]), _is_discrete(df[r["col2"]])
+    return (2, 1) if d2 and not d1 else (1, 2)
+
+
+def _discrete_groups(x):
+    """値ごとのグループ。人数が10未満の端の値は隣とまとめる（例：6人以上）。戻り値: [(ラベル用の値の集合, 下端, 上端)]"""
+    vc = x.value_counts().sort_index()
+    vals = list(vc.index)
+    groups = [[v] for v in vals]
+    while len(groups) > 1 and vc[groups[-1]].sum() < K_MIN:  # 上の端をまとめる
+        last = groups.pop()
+        groups[-1] = groups[-1] + last
+    while len(groups) > 1 and vc[groups[0]].sum() < K_MIN:  # 下の端をまとめる
+        first = groups.pop(0)
+        groups[0] = first + groups[0]
+    return groups
+
+
 def headline(df, r):
     """図の見出し（結論）を自動で作る。"""
     if r["kind1"] == "num" and r["kind2"] == "num":
-        return f"「{r['変数1']}」が高い人ほど、「{r['変数2']}」が{'高い' if r['効果量'] > 0 else '低い'}"
+        xi, yi = _xy(df, r)
+        ux, uy = r.get(f"単位{xi}", ""), r.get(f"単位{yi}", "")
+        wx = "多い" if ux in COUNT_UNITS else "高い"
+        up = r["効果量"] > 0
+        wy = ("多い" if up else "少ない") if uy in COUNT_UNITS else ("高い" if up else "低い")
+        return f"「{r[f'変数{xi}']}」が{wx}人ほど、「{r[f'変数{yi}']}」が{wy}"
     if r["kind1"] == "cat" and r["kind2"] == "cat":
         return f"「{r['変数1']}」によって、「{r['変数2']}」の内訳が異なる"
     cat, num, lc, ln = _cat_num(r)
@@ -85,11 +119,12 @@ def headline(df, r):
     return f"「{ln}」は{lc}によって異なる（最も高い：{meds.index[0]}、最も低い：{meds.index[-1]}）"
 
 
-def footnote(r):
+def footnote(r, discrete=False):
     q = "q<0.001" if r["q"] < 0.001 else f"q={r['q']:.3f}"
     kind = {"ρ": "Spearman相関", "r": "Mann-Whitney検定", "ε²": "Kruskal-Wallis検定", "V": "カイ二乗検定"}[r["効果量の種類"]]
     base = f"{r['データ']}　n={r['n']:,}。{kind}（{r['効果量の種類']}={r['効果量']:+.2f}、{q}、多重比較補正後）。"
-    extra = {2: "横軸を5等分した区間ごとの中央値、縦線は四分位範囲。",
+    extra = {2: ("横軸の値ごとの中央値、縦線は四分位範囲。10人未満の端の値は隣とまとめて表示。" if discrete
+                 else "横軸を人数が等しい5区間に分けた区間ごとの中央値、縦線は四分位範囲。"),
              1: "棒は中央値。10人未満のカテゴリは非表示。",
              0: "各カテゴリの中での内訳。10人未満のカテゴリは非表示。"}[(r["kind1"] == "num") + (r["kind2"] == "num")]
     return base + extra
@@ -106,11 +141,14 @@ def make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fal
 
 def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=False):
     """matplotlib の Figure を返す。title=None なら見出しなし（スライド側にタイトルを置く場合）。"""
+    discrete = False
     if r["kind1"] == "num" and r["kind2"] == "num":
-        c1, c2, l1, l2 = r["col1"], r["col2"], r["変数1"], r["変数2"]
+        xi, yi = _xy(df, r)
+        c1, c2 = r[f"col{xi}"], r[f"col{yi}"]  # c1 が横軸、c2 が縦軸
         m = df[[c1, c2]].dropna()
+        discrete = _is_discrete(m[c1])
         fig, ax = plt.subplots(figsize=(8, 4.4))
-        if style == "散布図＋傾向線":
+        if style == "散布図＋傾向線" and not discrete:
             s = m.sample(min(len(m), 3000), random_state=0)
             ax.scatter(s[c1], s[c2], s=10, color=BLUE, alpha=0.3, linewidths=0)
             m["bin"] = pd.qcut(m[c1].rank(method="first"), 10, labels=False)
@@ -121,23 +159,41 @@ def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fa
                 pad = (hi - lo) * 0.05 or 1
                 (ax.set_xlim if a_ == "x" else ax.set_ylim)(lo - pad, hi + pad)
             ax.legend(loc="upper left")
-            ax.set_xlabel(axis_label(r, 1))
+            ax.set_xlabel(axis_label(r, xi))
+            ax.set_ylabel(axis_label(r, yi))
         else:
-            m["bin"] = pd.qcut(m[c1].rank(method="first"), 5, labels=False)
+            ux = val_unit(r, xi)
+            if discrete:  # 値ごと（例：世帯人数 1人・2人・…）
+                groups = _discrete_groups(m[c1])
+                lab_of = {}
+                ticks = []
+                for gi, g in enumerate(groups):
+                    for v in g:
+                        lab_of[v] = gi
+                    n_g = int(m[c1].isin(g).sum())
+                    lo_, hi_ = fmt(min(g)), fmt(max(g))
+                    name = f"{lo_}{ux}" if len(g) == 1 else (f"{lo_}{ux}以上" if gi == len(groups) - 1 else
+                                                             f"{hi_}{ux}以下" if gi == 0 else f"{lo_}〜{hi_}{ux}")
+                    ticks.append(f"{name}\n(n={n_g:,})")
+                m["bin"] = m[c1].map(lab_of)
+            else:  # 人数が等しい5区間
+                m["bin"] = pd.qcut(m[c1].rank(method="first"), 5, labels=False)
             t = m.groupby("bin").agg(lo=(c1, "min"), hi=(c1, "max"), y=(c2, "median"),
                                      q1=(c2, lambda s: s.quantile(0.25)), q3=(c2, lambda s: s.quantile(0.75)), n=(c2, "size"))
+            if not discrete:
+                ticks = [f"{['低い', 'やや低い', '中間', 'やや高い', '高い'][i]}\n{fmt(a)}〜{fmt(b)}\n(n={int(n):,})"
+                         for i, (a, b, n) in enumerate(zip(t.lo, t.hi, t.n))]
             xs = np.arange(len(t))
             colors = [ORANGE if r["効果量"] > 0 and i == len(t) - 1 or r["効果量"] < 0 and i == 0 else BLUE for i in xs]
             ax.bar(xs, t.y, color=colors, width=0.62)
             ax.errorbar(xs, t.y, yerr=[t.y - t.q1, t.q3 - t.y], fmt="none", ecolor=INK2, capsize=3, lw=1)
-            u2 = val_unit(r, 2)
+            u2 = val_unit(r, yi)
             for x, y in zip(xs, t.y):
                 ax.text(x + 0.33, y, fmt(y) + u2, va="center", ha="left", fontsize=9, color=INK, fontweight="bold")
-            ax.set_xticks(xs, [f"{['低い', 'やや低い', '中間', 'やや高い', '高い'][i]}\n{fmt(a)}〜{fmt(b)}" for i, (a, b) in enumerate(zip(t.lo, t.hi))],
-                          fontsize=8.5)
-            ax.set_xlabel(f"{axis_label(r, 1)}　人数が等しい5区間")
+            ax.set_xticks(xs, ticks, fontsize=8.5)
+            ax.set_xlabel(axis_label(r, xi) if discrete else f"{axis_label(r, xi)}　人数が等しい5区間")
             ax.grid(axis="x", visible=False)
-        ax.set_ylabel(axis_label(r, 2) if style == "散布図＋傾向線" else axis_label(r, 2, "の中央値"))
+            ax.set_ylabel(axis_label(r, yi, "の中央値"))
     elif r["kind1"] == "cat" and r["kind2"] == "cat":
         c1, c2, l1, l2 = r["col1"], r["col2"], r["変数1"], r["変数2"]
         m = df[[c1, c2]].dropna()
@@ -215,7 +271,7 @@ def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fa
         return fig
     if title:
         fig.suptitle(title, x=0.01, ha="left", fontweight="bold", color=INK, fontsize=12.5)
-    fig.text(0.01, -0.02, footnote(r), fontsize=8, color=INK2, ha="left", va="top", wrap=True)
+    fig.text(0.01, -0.02, footnote(r, discrete), fontsize=8, color=INK2, ha="left", va="top", wrap=True)
     fig.tight_layout()
     return fig
 

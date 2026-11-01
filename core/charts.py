@@ -26,6 +26,23 @@ def pair_chart(df, r):
     """検定結果1行に対応する図。"""
     c1, c2, l1, l2 = r["col1"], r["col2"], r["変数1"], r["変数2"]
     if r["kind1"] == "num" and r["kind2"] == "num":
+        from .present import _discrete_groups, _is_discrete, _xy, fmt
+        xi, yi = _xy(df, r)
+        if _is_discrete(df[r[f"col{xi}"]]):  # 世帯人数・回数など：値ごとの箱ひげ図（n付き）
+            cx, cy = r[f"col{xi}"], r[f"col{yi}"]
+            m = df[[cx, cy]].dropna()
+            groups = _discrete_groups(m[cx])
+            u = r.get(f"単位{xi}", "") or ""
+            fig = go.Figure()
+            for gi, g in enumerate(groups):
+                v = m.loc[m[cx].isin(g), cy]
+                lo_, hi_ = fmt(min(g)), fmt(max(g))
+                name = f"{lo_}{u}" if len(g) == 1 else (f"{lo_}{u}以上" if gi == len(groups) - 1 else f"{hi_}{u}以下" if gi == 0 else f"{lo_}〜{hi_}{u}")
+                fig.add_trace(go.Box(y=v, name=f"{name}<br>(n={len(v):,})", marker_color=CAT[0], boxpoints=False, line=dict(width=1.5)))
+            lo, hi = m[cy].quantile([0.01, 0.99])
+            pad = (hi - lo) * 0.05 or 1
+            fig.update_layout(showlegend=False, xaxis=dict(title=axis_label(r, xi)), yaxis=dict(title=axis_label(r, yi), range=[lo - pad, hi + pad]))
+            return _layout(fig)
         m = df[[c1, c2]].dropna()
         sample = m.sample(min(len(m), 3000), random_state=0)
         fig = go.Figure()
