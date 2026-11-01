@@ -184,7 +184,8 @@ def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fa
                 ticks = [f"{['低い', 'やや低い', '中間', 'やや高い', '高い'][i]}\n{fmt(a)}〜{fmt(b)}\n(n={int(n):,})"
                          for i, (a, b, n) in enumerate(zip(t.lo, t.hi, t.n))]
             xs = np.arange(len(t))
-            colors = [ORANGE if r["効果量"] > 0 and i == len(t) - 1 or r["効果量"] < 0 and i == 0 else BLUE for i in xs]
+            notsig = str(r.get("判定", "")) == "有意でない"  # 有意でない結果は差があるように見せない（強調色なし）
+            colors = [BLUE if notsig else ORANGE if r["効果量"] > 0 and i == len(t) - 1 or r["効果量"] < 0 and i == 0 else BLUE for i in xs]
             ax.bar(xs, t.y, color=colors, width=0.62)
             ax.errorbar(xs, t.y, yerr=[t.y - t.q1, t.q3 - t.y], fmt="none", ecolor=INK2, capsize=3, lw=1)
             u2 = val_unit(r, yi)
@@ -235,7 +236,12 @@ def _make_figure(df, r, title=None, style="区間ごとの中央値", compact=Fa
         if trimmed:
             g = pd.concat([g.head(5), g.tail(5)])
         hi, lo = g["median"].idxmax(), g["median"].idxmin()
-        colors = [ORANGE if i == hi else BLUE if i == lo else "#9ec5f4" for i in g.index] if len(g) > 2 else [ORANGE, BLUE] if g["median"].iloc[0] >= g["median"].iloc[1] else [BLUE, ORANGE]
+        if str(r.get("判定", "")) == "有意でない":
+            hi = lo = None
+        if hi is None:
+            colors = [BLUE] * len(g)
+        else:
+            colors = [ORANGE if i == hi else BLUE if i == lo else "#9ec5f4" for i in g.index] if len(g) > 2 else [ORANGE, BLUE] if g["median"].iloc[0] >= g["median"].iloc[1] else [BLUE, ORANGE]
         labels = [f"{i}\n(n={int(s):,})" for i, s in zip(g.index, g["size"])]
         if len(g) <= 5:
             fig, ax = plt.subplots(figsize=(8, 4.2))
